@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agile Sprint Board</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#172b4d;--mut:#6b778c;--line:#dfe1e6;--pri:#0052cc}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#fff;border-bottom:1px solid var(--line);padding:12px 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+h1{font-size:18px;margin:0 12px 0 0}
+select,input,textarea,button{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:4px;background:#fff}
+button{cursor:pointer}button.p{background:var(--pri);color:#fff;border-color:var(--pri)}
+.stats{display:flex;gap:16px;padding:12px 20px;color:var(--mut);align-items:center}
+.stats b{color:var(--ink)}.bar{flex:1;max-width:260px;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:#36b37e}
+.board{display:grid;grid-template-columns:repeat(6,minmax(190px,1fr));gap:10px;padding:0 20px 20px;overflow-x:auto}
+.col{background:#ebecf0;border-radius:6px;padding:8px;min-height:60vh}
+.col h3{font-size:12px;text-transform:uppercase;color:var(--mut);margin:4px 4px 8px;display:flex;justify-content:space-between}
+.col.over{outline:2px dashed var(--pri)}
+.card{background:var(--card);border-radius:4px;padding:10px;margin-bottom:8px;box-shadow:0 1px 1px #091e4240;cursor:grab}
+.card .k{font-size:11px;color:var(--mut);display:flex;justify-content:space-between}
+.card .t{margin:4px 0 8px;font-weight:500}.card .f{display:flex;gap:6px;align-items:center}
+.card select{flex:1;padding:2px 4px;font-size:12px}.pts{background:#dfe1e6;border-radius:10px;padding:1px 8px;font-size:12px}
+.x{border:0;background:none;color:var(--mut);padding:0 4px}
+dialog{border:0;border-radius:8px;padding:20px;width:340px}dialog label{display:block;margin:8px 0 2px;font-size:12px;color:var(--mut)}
+dialog input,dialog select,dialog textarea{width:100%}
+</style></head><body>
+<header><h1>Sprint Board</h1>
+<select id="sp"></select><button onclick="newSprint()">+ Sprint</button>
+<select id="flt"></select><button onclick="newDev()">+ Developer</button>
+<button class="p" onclick="openStory()">+ Story</button></header>
+<div class="stats" id="stats"></div><div class="board" id="board"></div>
+<dialog id="dlg"><form method="dialog" onsubmit="return false">
+<label>Title</label><input id="ti"><label>Description</label><textarea id="de" rows="3"></textarea>
+<label>Story points</label><input id="po" type="number" value="3" min="1"><label>Assignee</label><select id="as"></select>
+<div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end"><button onclick="dlg.close()">Cancel</button><button class="p" onclick="saveStory()">Save</button></div></form></dialog>
+<script>
+const S=['IN_PROGRESS','DEV_READY','DEV_COMPLETED','QA_READY','QA_COMPLETED','PO_ACCEPTANCE'];
+const L={IN_PROGRESS:'In Progress',DEV_READY:'Dev Ready',DEV_COMPLETED:'Dev Completed',QA_READY:'QA Ready',QA_COMPLETED:'QA Completed',PO_ACCEPTANCE:'PO Acceptance'};
+let sprints=[],devs=[],stories=[],sid=null,drag=null;
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(u,m='GET',b){const r=await fetch('/api'+u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});if(!r.ok)throw new Error(r.status);return r.status===200&&r.headers.get('content-type')?.includes('json')?r.json():null}
+async function load(){sprints=await api('/sprints');devs=await api('/developers');
+ if(!sid||!sprints.find(s=>s.id==sid))sid=(sprints.find(s=>s.active)||sprints[0])?.id;
+ stories=sid?await api('/stories?sprintId='+sid):[];render()}
+const opts=(list,sel,blank)=>(blank?`<option value="">${blank}</option>`:'')+list.map(x=>`<option value="${x.id}" ${x.id==sel?'selected':''}>${esc(x.name)}</option>`).join('');
+function render(){const f=$('flt').value;
+ $('sp').innerHTML=opts(sprints,sid);$('sp').onchange=e=>{sid=e.target.value;load()};
+ $('flt').innerHTML=opts(devs,f,'All developers');$('flt').value=f;$('flt').onchange=render;
+ const vis=stories.filter(s=>!f||s.assigneeId==f),tot=vis.reduce((a,s)=>a+s.points,0),done=vis.filter(s=>s.status=='PO_ACCEPTANCE').reduce((a,s)=>a+s.points,0);
+ const sp=sprints.find(s=>s.id==sid);
+ $('stats').innerHTML=sp?`<span><b>${esc(sp.name)}</b> ${esc(sp.goal||'')} (${sp.startDate||'?'} → ${sp.endDate||'?'})</span><span><b>${vis.length}</b> stories</span><span><b>${done}/${tot}</b> pts accepted</span><div class="bar"><i style="width:${tot?done/tot*100:0}%"></i></div>`:'Create a sprint to begin';
+ $('board').innerHTML=S.map(st=>{const c=vis.filter(s=>s.status==st);return `<div class="col" data-s="${st}"><h3>${L[st]}<span>${c.length}</span></h3>${c.map(card).join('')}</div>`}).join('');
+ document.querySelectorAll('.card').forEach(c=>c.ondragstart=()=>drag=c.dataset.id);
+ document.querySelectorAll('.col').forEach(c=>{c.ondragover=e=>{e.preventDefault();c.classList.add('over')};c.ondragleave=()=>c.classList.remove('over');
+  c.ondrop=async e=>{e.preventDefault();c.classList.remove('over');if(drag){await api(`/stories/${drag}/status`,'PATCH',{status:c.dataset.s});drag=null;load()}}})}
+const card=s=>`<div class="card" draggable="true" data-id="${s.id}"><div class="k"><span>STORY-${s.id}</span><span><span class="pts">${s.points}</span><button class="x" onclick="del(${s.id})">✕</button></span></div>
+<div class="t">${esc(s.title)}</div><div class="f"><select onchange="assign(${s.id},this.value)">${opts(devs,s.assigneeId,'Unassigned')}</select></div></div>`;
+async function assign(id,v){await api(`/stories/${id}/assignee`,'PATCH',{assigneeId:v||null});load()}
+async function del(id){if(confirm('Delete story?')){await api('/stories/'+id,'DELETE');load()}}
+async function newSprint(){const name=prompt('Sprint name');if(!name)return;const goal=prompt('Sprint goal')||'';const d=new Date(),e=new Date(Date.now()+12096e5);
+ const r=await api('/sprints','POST',{name,goal,startDate:d.toISOString().slice(0,10),endDate:e.toISOString().slice(0,10),active:true});sid=r.id;load()}
+async function newDev(){const name=prompt('Developer name');if(name){await api('/developers','POST',{name});load()}}
+function openStory(){if(!sid)return alert('Create a sprint first');$('ti').value='';$('de').value='';$('po').value=3;$('as').innerHTML=opts(devs,null,'Unassigned');$('dlg').showModal()}
+async function saveStory(){if(!$('ti').value.trim())return;
+ await api('/stories','POST',{title:$('ti').value,description:$('de').value,points:+$('po').value||1,sprintId:+sid,assigneeId:$('as').value?+$('as').value:null,status:'IN_PROGRESS'});$('dlg').close();load()}
+load();
+</script></body></html>

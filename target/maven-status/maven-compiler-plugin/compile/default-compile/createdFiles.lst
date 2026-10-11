@@ -1,0 +1,9 @@
+com\agile\board\Story.class
+com\agile\board\Status.class
+com\agile\board\Developer.class
+com\agile\board\StoryRepo.class
+com\agile\board\BoardController.class
+com\agile\board\BoardApplication.class
+com\agile\board\DevRepo.class
+com\agile\board\Sprint.class
+com\agile\board\SprintRepo.class
